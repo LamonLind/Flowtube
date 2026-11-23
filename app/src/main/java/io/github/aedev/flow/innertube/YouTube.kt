@@ -2576,7 +2576,12 @@ object YouTube {
                                 ?.jsonObject
                                 ?.get("runs")
                                 ?.jsonArray
-                                ?.joinToString("") { it.jsonObject["text"]?.jsonPrimitive?.contentOrNull.orEmpty() }
+                                ?.joinToString("") {
+                                    it.jsonObject["text"]
+                                        ?.jsonPrimitive
+                                        ?.contentOrNull
+                                        .orEmpty()
+                                }
                             ?: return@mapNotNull null
                     val thumbnail =
                         renderer["thumbnail"]

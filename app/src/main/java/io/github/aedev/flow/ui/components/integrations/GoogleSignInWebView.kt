@@ -43,7 +43,11 @@ internal fun GoogleSignInWebView(
                     object : WebViewClient() {
                         private var completed = false
 
-                        override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+                        override fun onPageStarted(
+                            view: WebView,
+                            url: String,
+                            favicon: Bitmap?,
+                        ) {
                             if (isYouTubeUrl(url) && !completed) {
                                 completed = true
                                 CookieManager.getInstance().flush()
@@ -68,5 +72,9 @@ internal fun GoogleSignInWebView(
 
 private fun isYouTubeUrl(url: String): Boolean =
     runCatching {
-        Uri.parse(url).host?.lowercase()?.let { it == YOUTUBE_HOST || it.endsWith(".$YOUTUBE_HOST") } == true
+        Uri
+            .parse(url)
+            .host
+            ?.lowercase()
+            ?.let { it == YOUTUBE_HOST || it.endsWith(".$YOUTUBE_HOST") } == true
     }.getOrDefault(false)

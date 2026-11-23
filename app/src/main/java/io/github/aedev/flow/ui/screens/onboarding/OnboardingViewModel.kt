@@ -8,11 +8,11 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.aedev.flow.R
+import io.github.aedev.flow.data.auth.YouTubeAuthRepository
 import io.github.aedev.flow.data.backup.BackupCoordinator
 import io.github.aedev.flow.data.backup.BackupOperation
 import io.github.aedev.flow.data.backup.ImportKind
 import io.github.aedev.flow.data.backup.ImportSource
-import io.github.aedev.flow.data.auth.YouTubeAuthRepository
 import io.github.aedev.flow.data.local.ChannelSubscription
 import io.github.aedev.flow.data.local.PlayerPreferences
 import io.github.aedev.flow.data.local.SubscriptionRepository
@@ -218,7 +218,8 @@ class OnboardingViewModel
                         _signInMessages.emit(context.getString(R.string.youtube_sign_in_failed))
                         return@launch
                     }
-                YouTube.authenticatedSubscriptions()
+                YouTube
+                    .authenticatedSubscriptions()
                     .onSuccess { subscriptions.subscribeAll(it) }
                     .onFailure { _signInMessages.emit(context.getString(R.string.youtube_subscriptions_failed)) }
                 _signInMessages.emit(context.getString(R.string.youtube_signed_in_as, account.name))

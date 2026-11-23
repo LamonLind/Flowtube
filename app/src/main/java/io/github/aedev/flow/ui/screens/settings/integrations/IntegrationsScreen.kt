@@ -92,8 +92,8 @@ internal fun IntegrationsScreen(
     ) {
         group(key = "integrations.youtube_account", header = R.string.youtube_account_header) {
             row("integrations.youtube_account.row") { shape ->
-                if (youtubeAuthState.isSignedIn && youtubeAuthState.account != null) {
-                    val account = youtubeAuthState.account
+                val account = youtubeAuthState.account
+                if (youtubeAuthState.isSignedIn && account != null) {
                     FlowNavRow(
                         title = account.name,
                         supportingText = account.email ?: account.channelHandle,

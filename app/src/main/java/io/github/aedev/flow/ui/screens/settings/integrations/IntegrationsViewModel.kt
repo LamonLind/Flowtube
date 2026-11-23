@@ -2,8 +2,8 @@ package io.github.aedev.flow.ui.screens.settings.integrations
 
 import android.content.Context
 import androidx.compose.runtime.Immutable
-import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.aedev.flow.R
 import io.github.aedev.flow.data.auth.YouTubeAuthRepository
 import io.github.aedev.flow.data.auth.YouTubeAuthState
@@ -166,7 +166,8 @@ class IntegrationsViewModel
                             _youtubeAuthMessages.emit(context.getString(R.string.youtube_sign_in_failed))
                             return@write
                         }
-                YouTube.authenticatedSubscriptions()
+                YouTube
+                    .authenticatedSubscriptions()
                     .onSuccess { subscriptions.subscribeAll(it) }
                     .onFailure { _youtubeAuthMessages.emit(context.getString(R.string.youtube_subscriptions_failed)) }
                 _youtubeAuthMessages.emit(context.getString(R.string.youtube_signed_in_as, account.name))
