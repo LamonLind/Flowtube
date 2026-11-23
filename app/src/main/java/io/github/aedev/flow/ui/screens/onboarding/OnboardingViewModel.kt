@@ -7,10 +7,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import io.github.aedev.flow.R
 import io.github.aedev.flow.data.backup.BackupCoordinator
 import io.github.aedev.flow.data.backup.BackupOperation
 import io.github.aedev.flow.data.backup.ImportKind
 import io.github.aedev.flow.data.backup.ImportSource
+import io.github.aedev.flow.data.auth.YouTubeAuthRepository
 import io.github.aedev.flow.data.local.ChannelSubscription
 import io.github.aedev.flow.data.local.PlayerPreferences
 import io.github.aedev.flow.data.local.SubscriptionRepository
@@ -22,9 +24,12 @@ import io.github.aedev.flow.data.recommendation.OnboardingCompleter
 import io.github.aedev.flow.data.recommendation.music.FavouriteArtistCatalog
 import io.github.aedev.flow.data.recommendation.music.FavouriteArtistPicker
 import io.github.aedev.flow.data.recommendation.music.FavouriteArtistsStore
+import io.github.aedev.flow.innertube.YouTube
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -59,9 +64,10 @@ class OnboardingViewModel
         private val channelSearch: ChannelSearch,
         private val completer: OnboardingCompleter,
         private val preferences: PlayerPreferences,
+        private val youtubeAuth: YouTubeAuthRepository,
         favouriteArtists: FavouriteArtistsStore,
         artistCatalog: FavouriteArtistCatalog,
-        @ApplicationContext context: Context,
+        @ApplicationContext private val context: Context,
         profiles: ProfileRepository,
     ) : ViewModel() {
         private val _state = MutableStateFlow(restore())
@@ -74,6 +80,8 @@ class OnboardingViewModel
 
         val newVideoAlerts: StateFlow<Boolean> =
             preferences.notifNewVideosEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+        private val _signInMessages = MutableSharedFlow<String>(extraBufferCapacity = 1)
+        val signInMessages: SharedFlow<String> = _signInMessages
 
         private var searchJob: Job? = null
         private var completion: Job? = null
@@ -196,6 +204,29 @@ class OnboardingViewModel
         fun cancelImport() {
             pendingSource = null
             backup.cancelConfirmation()
+        }
+
+        fun completeYouTubeSignIn() {
+            viewModelScope.launch {
+                runCatching { youtubeAuth.captureWebViewCookies() }
+                    .onFailure {
+                        _signInMessages.emit(context.getString(R.string.youtube_sign_in_failed))
+                        return@launch
+                    }
+                val account =
+                    youtubeAuth.refreshAccount().getOrElse {
+                        _signInMessages.emit(context.getString(R.string.youtube_sign_in_failed))
+                        return@launch
+                    }
+                YouTube.authenticatedSubscriptions()
+                    .onSuccess { subscriptions.subscribeAll(it) }
+                    .onFailure { _signInMessages.emit(context.getString(R.string.youtube_subscriptions_failed)) }
+                _signInMessages.emit(context.getString(R.string.youtube_signed_in_as, account.name))
+            }
+        }
+
+        fun reportSignInFailure() {
+            _signInMessages.tryEmit(context.getString(R.string.youtube_sign_in_failed))
         }
 
         /** Seeds the engine once; a second tap while it runs does nothing. */

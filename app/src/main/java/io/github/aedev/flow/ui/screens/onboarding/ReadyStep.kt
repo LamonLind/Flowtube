@@ -12,6 +12,7 @@ import androidx.compose.material.icons.outlined.MoveToInbox
 import androidx.compose.material.icons.outlined.Subscriptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Text
@@ -45,6 +46,7 @@ internal fun ReadyStep(
     artistCount: Int,
     hero: HeroSlot,
     onEdit: (OnboardingStep) -> Unit,
+    onSignIn: () -> Unit,
     contentPadding: PaddingValues,
 ) {
     BookendLayout(
@@ -96,6 +98,9 @@ internal fun ReadyStep(
                     icon = Icons.Outlined.MoveToInbox,
                 ) { onEdit(OnboardingStep.IMPORT) }
             }
+        }
+        OutlinedButton(onClick = onSignIn) {
+            Text(stringResource(R.string.youtube_sign_in_optional))
         }
     }
 }

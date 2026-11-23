@@ -11,6 +11,7 @@ import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import dagger.hilt.android.HiltAndroidApp
 import io.github.aedev.flow.applock.AppLock
+import io.github.aedev.flow.data.auth.YouTubeAuthRepository
 import io.github.aedev.flow.data.contentfilter.aislist.AiListRepository
 import io.github.aedev.flow.data.local.PlayerPreferences
 import io.github.aedev.flow.data.local.SubscriptionRepository
@@ -83,6 +84,9 @@ class FlowApplication :
 
     @Inject
     lateinit var visitorIdentityStore: VisitorIdentityStore
+
+    @Inject
+    lateinit var youtubeAuthRepository: YouTubeAuthRepository
 
     @Inject
     internal lateinit var homeFeedLanguageReset: HomeFeedLanguageReset
@@ -212,6 +216,7 @@ class FlowApplication :
         WebPoTokenSession.bindIdentityStore(visitorIdentityStore)
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
+                youtubeAuthRepository.restore()
                 visitorIdentityStore.restore()?.let { restored ->
                     YouTube.visitorData = restored
                     Log.d(TAG, "visitorData restored")
