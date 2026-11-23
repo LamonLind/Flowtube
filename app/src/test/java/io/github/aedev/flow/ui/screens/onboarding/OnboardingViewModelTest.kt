@@ -74,6 +74,7 @@ class OnboardingViewModelTest {
         mockk(relaxed = true),
         mockk(relaxed = true),
         mockk(relaxed = true),
+        mockk(relaxed = true),
         profiles,
     )
 
