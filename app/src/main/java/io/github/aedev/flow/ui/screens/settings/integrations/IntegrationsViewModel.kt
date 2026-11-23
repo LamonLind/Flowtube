@@ -1,20 +1,28 @@
 package io.github.aedev.flow.ui.screens.settings.integrations
 
+import android.content.Context
 import androidx.compose.runtime.Immutable
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import io.github.aedev.flow.R
+import io.github.aedev.flow.data.auth.YouTubeAuthRepository
+import io.github.aedev.flow.data.auth.YouTubeAuthState
 import io.github.aedev.flow.data.contentfilter.aislist.AiListRepository
 import io.github.aedev.flow.data.contentfilter.aislist.AiListSource
 import io.github.aedev.flow.data.local.PlayerPreferences
 import io.github.aedev.flow.data.local.SponsorBlockAction
 import io.github.aedev.flow.data.local.SponsorBlockSkipButtonStyle
+import io.github.aedev.flow.data.local.SubscriptionRepository
 import io.github.aedev.flow.data.model.SponsorBlockCategories
 import io.github.aedev.flow.discord.DiscordLinkResult
 import io.github.aedev.flow.discord.DiscordPresenceController
+import io.github.aedev.flow.innertube.YouTube
 import io.github.aedev.flow.ui.screens.settings.SettingsViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 
 /** One segment category's behaviour and colour; a null [colorArgb] means the default colour. */
@@ -28,10 +36,22 @@ data class SegmentSetting(
 class IntegrationsViewModel
     @Inject
     constructor(
+        @ApplicationContext private val context: Context,
         private val preferences: PlayerPreferences,
         private val discord: DiscordPresenceController,
         private val aiList: AiListRepository,
+        private val youtubeAuth: YouTubeAuthRepository,
     ) : SettingsViewModel() {
+        private val subscriptions = SubscriptionRepository.getInstance(context)
+
+        val youtubeAuthState = youtubeAuth.state.asState(YouTubeAuthState())
+
+        init {
+            write {
+                if (youtubeAuth.state.first().isSignedIn) youtubeAuth.refreshAccount()
+            }
+        }
+
         val sponsorBlock = preferences.sponsorBlockEnabled.asState(false)
         val submitButton = preferences.sbSubmitEnabled.asState(false)
         val userId = preferences.sbUserId.asState(null)
@@ -66,6 +86,9 @@ class IntegrationsViewModel
                 )
 
         private val _discordFailures = MutableSharedFlow<String>(extraBufferCapacity = 1)
+
+        private val _youtubeAuthMessages = MutableSharedFlow<String>(extraBufferCapacity = 1)
+        val youtubeAuthMessages: SharedFlow<String> = _youtubeAuthMessages.asSharedFlow()
 
         /** The message of a Discord action that failed, for the page to show once. */
         val discordFailures: SharedFlow<String> = _discordFailures.asSharedFlow()
@@ -128,6 +151,37 @@ class IntegrationsViewModel
         fun retryDiscord() = write { report(discord.retry()) }
 
         fun unlinkDiscord() = write { discord.unlink() }
+
+        fun completeYouTubeSignIn() =
+            write {
+                runCatching { youtubeAuth.captureWebViewCookies() }
+                    .onFailure {
+                        _youtubeAuthMessages.emit(context.getString(R.string.youtube_sign_in_failed))
+                        return@write
+                    }
+                val account =
+                    youtubeAuth
+                        .refreshAccount()
+                        .getOrElse {
+                            _youtubeAuthMessages.emit(context.getString(R.string.youtube_sign_in_failed))
+                            return@write
+                        }
+                YouTube
+                    .authenticatedSubscriptions()
+                    .onSuccess { subscriptions.subscribeAll(it) }
+                    .onFailure { _youtubeAuthMessages.emit(context.getString(R.string.youtube_subscriptions_failed)) }
+                _youtubeAuthMessages.emit(context.getString(R.string.youtube_signed_in_as, account.name))
+            }
+
+        fun signOutYouTube() =
+            write {
+                youtubeAuth.signOut()
+                _youtubeAuthMessages.emit(context.getString(R.string.youtube_signed_out))
+            }
+
+        fun reportYouTubeSignInFailure() {
+            _youtubeAuthMessages.tryEmit(context.getString(R.string.youtube_sign_in_failed))
+        }
 
         private fun report(result: DiscordLinkResult) {
             if (result is DiscordLinkResult.Failure && result.message.isNotBlank()) _discordFailures.tryEmit(result.message)

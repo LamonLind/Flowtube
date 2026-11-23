@@ -11,12 +11,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,6 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.aedev.flow.R
 import io.github.aedev.flow.data.backup.BackupOperation
 import io.github.aedev.flow.data.backup.ImportKind
+import io.github.aedev.flow.ui.components.integrations.GoogleSignInWebView
 import io.github.aedev.flow.ui.components.shared.FlowConfirmDialog
 import io.github.aedev.flow.ui.components.shared.FlowMaxContentWidth
 import io.github.aedev.flow.ui.utils.LocalWindowSizeClass
@@ -51,10 +54,12 @@ fun OnboardingScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val importOperation by viewModel.importOperation.collectAsStateWithLifecycle()
     val newVideoAlerts by viewModel.newVideoAlerts.collectAsStateWithLifecycle()
+    val signInMessages = viewModel.signInMessages
     val haptic = LocalHapticFeedback.current
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var interestsRevealed by rememberSaveable { mutableStateOf(false) }
+    var showYouTubeSignIn by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(state.completed) { if (state.completed) onComplete() }
     BackHandler(enabled = state.step.index > 0) { viewModel.back() }
@@ -79,6 +84,9 @@ fun OnboardingScreen(
         viewModel.dismissImport()
         // Dismissing changes this effect's key, which would cancel a snackbar shown from here.
         scope.launch { snackbarHostState.showSnackbar(message) }
+    }
+    LaunchedEffect(signInMessages) {
+        signInMessages.collect { snackbarHostState.showSnackbar(it) }
     }
 
     var pendingImport by rememberSaveable { mutableStateOf<ImportKind?>(null) }
@@ -158,8 +166,29 @@ fun OnboardingScreen(
                                 viewModel.toggleTopic(topic)
                             },
                             onInterestsRevealed = { interestsRevealed = true },
+                            onSignIn = { showYouTubeSignIn = true },
                         ),
                 )
+            }
+        }
+
+        if (showYouTubeSignIn) {
+            androidx.compose.ui.window.Dialog(onDismissRequest = { showYouTubeSignIn = false }) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 420.dp, max = 760.dp),
+                    shape = MaterialTheme.shapes.extraLarge,
+                ) {
+                    GoogleSignInWebView(
+                        onSignedIn = {
+                            showYouTubeSignIn = false
+                            viewModel.completeYouTubeSignIn()
+                        },
+                        onFailure = {
+                            showYouTubeSignIn = false
+                            viewModel.reportSignInFailure()
+                        },
+                    )
+                }
             }
         }
     }

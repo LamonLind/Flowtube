@@ -90,11 +90,20 @@ Flow gives you both. The recommendation engine learns what you like by analyzing
 - Subscription management with cached feeds
 
 ### Privacy
+
 - No Google account required
 - No ads, analytics, or tracking
 - All data stored locally on your device
 - Import subscriptions and history from NewPipe
 - Export or delete everything at any time
+
+### Signing in
+
+Flow can optionally sign in to YouTube through an in-app Google page. This uses session cookies
+stored in the Android Keystore to load your subscriptions and personalized YouTube responses.
+Session cookies give access to the whole Google account, so only sign in on a device you trust.
+This is an unofficial integration and may stop working if Google or YouTube changes its login or
+request formats. Authenticated watch-history import is not currently supported.
 
 ### Appearance
 - 11 themes: Light, Dark, OLED Black, Ocean Blue, Forest Green, Sunset Orange, Purple Nebula, Midnight Black, Rose Gold, Arctic Ice, Crimson Red

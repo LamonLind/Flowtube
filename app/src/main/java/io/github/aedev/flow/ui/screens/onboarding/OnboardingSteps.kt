@@ -42,6 +42,7 @@ internal class StepActions(
     val onPick: (ImportKind) -> Unit,
     val onTopicToggle: (String) -> Unit,
     val onInterestsRevealed: () -> Unit,
+    val onSignIn: () -> Unit,
 )
 
 /**
@@ -94,6 +95,7 @@ internal fun SharedTransitionScope.OnboardingSteps(
                         artistCount = artists.picked.size,
                         hero = hero,
                         onEdit = actions.viewModel::goTo,
+                        onSignIn = actions.onSignIn,
                         contentPadding = StepPadding,
                     )
                 }

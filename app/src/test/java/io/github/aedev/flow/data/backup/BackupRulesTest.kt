@@ -79,6 +79,7 @@ class BackupRulesTest {
             "downloads",
             "animated_artwork",
             "playback_errors",
+            "youtube_auth",
             "flow_file_tombstones",
             "music_home_cache_prefs",
         )

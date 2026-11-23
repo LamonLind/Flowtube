@@ -2,6 +2,8 @@ package io.github.aedev.flow.innertube
 
 import android.util.Log
 import io.github.aedev.flow.FlowApplication
+import io.github.aedev.flow.data.auth.cookieValue
+import io.github.aedev.flow.data.auth.sapisidHashHeader
 import io.github.aedev.flow.data.local.PlayerPreferences
 import io.github.aedev.flow.innertube.models.Context
 import io.github.aedev.flow.innertube.models.MediaInfo
@@ -12,8 +14,6 @@ import io.github.aedev.flow.innertube.models.body.*
 import io.github.aedev.flow.innertube.models.normalizeYouTubeHostLanguage
 import io.github.aedev.flow.innertube.models.response.NextResponse
 import io.github.aedev.flow.innertube.models.response.PlayerResponse
-import io.github.aedev.flow.innertube.utils.parseCookieString
-import io.github.aedev.flow.innertube.utils.sha1
 import io.github.aedev.flow.network.FlowRequestLog
 import io.github.aedev.flow.network.SharedConnectionPool
 import io.ktor.client.*
@@ -79,11 +79,6 @@ class InnerTube {
     var onVisitorDataChanged: ((String?) -> Unit)? = null
     var dataSyncId: String? = null
     var cookie: String? = null
-        set(value) {
-            field = value
-            cookieMap = if (value == null) emptyMap() else parseCookieString(value)
-        }
-    private var cookieMap = emptyMap<String, String>()
 
     var proxy: Proxy? = null
         set(value) {
@@ -110,6 +105,7 @@ class InnerTube {
         }
 
     var useLoginForBrowse: Boolean = false
+    var onAuthenticationFailure: (() -> Unit)? = null
 
     private fun sanitizeLocale(value: YouTubeLocale): YouTubeLocale =
         YouTubeLocale(
@@ -236,6 +232,11 @@ class InnerTube {
         while (true) {
             try {
                 return block()
+            } catch (e: ClientRequestException) {
+                if (e.response.status == HttpStatusCode.Unauthorized || e.response.status == HttpStatusCode.Forbidden) {
+                    onAuthenticationFailure?.invoke()
+                }
+                throw e
             } catch (e: IOException) {
                 attempt++
                 if (attempt >= maxAttempts) throw e
@@ -261,13 +262,12 @@ class InnerTube {
             append("X-Origin", origin)
             append("Referer", referer)
             visitorData?.let { append("X-Goog-Visitor-Id", it) }
+            cookie?.let { append(HttpHeaders.Cookie, it) }
             if (setLogin && client.loginSupported) {
-                cookie?.let { cookie ->
-                    append("cookie", cookie)
-                    if ("SAPISID" !in cookieMap) return@let
+                append("X-Goog-AuthUser", "0")
+                cookieValue(cookie.orEmpty(), "SAPISID")?.let { sapisid ->
                     val currentTime = System.currentTimeMillis() / 1000
-                    val sapisidHash = sha1("$currentTime ${cookieMap["SAPISID"]} $origin")
-                    append("Authorization", "SAPISIDHASH ${currentTime}_$sapisidHash")
+                    append("Authorization", sapisidHashHeader(currentTime, sapisid, origin))
                 }
             }
         }
@@ -326,6 +326,14 @@ class InnerTube {
                         append("X-Origin", YouTubeClient.ORIGIN_YOUTUBE)
                         append("Referer", YouTubeClient.REFERER_YOUTUBE)
                     }
+                    cookie?.let { append(HttpHeaders.Cookie, it) }
+                    if (!anonymous && client.loginSupported) {
+                        append("X-Goog-AuthUser", "0")
+                        cookieValue(cookie.orEmpty(), "SAPISID")?.let { sapisid ->
+                            val currentTime = System.currentTimeMillis() / 1000
+                            append("Authorization", sapisidHashHeader(currentTime, sapisid, YouTubeClient.ORIGIN_YOUTUBE))
+                        }
+                    }
                     requestVisitorData?.let { append("X-Goog-Visitor-Id", it) }
                 }
                 contentType(io.ktor.http.ContentType.Application.Json)
@@ -375,6 +383,14 @@ class InnerTube {
                     append("X-YouTube-Client-Version", client.clientVersion)
                     append("X-Origin", YouTubeClient.ORIGIN_YOUTUBE)
                     append("Referer", YouTubeClient.REFERER_YOUTUBE)
+                    cookie?.let { append(HttpHeaders.Cookie, it) }
+                    if (client.loginSupported) {
+                        append("X-Goog-AuthUser", "0")
+                        cookieValue(cookie.orEmpty(), "SAPISID")?.let { sapisid ->
+                            val currentTime = System.currentTimeMillis() / 1000
+                            append("Authorization", sapisidHashHeader(currentTime, sapisid, YouTubeClient.ORIGIN_YOUTUBE))
+                        }
+                    }
                     requestVisitorData?.let { append("X-Goog-Visitor-Id", it) }
                 }
                 contentType(ContentType.Application.Json)
@@ -575,6 +591,14 @@ class InnerTube {
                 append("X-YouTube-Client-Version", client.clientVersion)
                 append("X-Origin", "https://www.youtube.com")
                 append("Referer", "https://www.youtube.com/")
+                cookie?.let { append(HttpHeaders.Cookie, it) }
+                if (client.loginSupported) {
+                    append("X-Goog-AuthUser", "0")
+                    cookieValue(cookie.orEmpty(), "SAPISID")?.let { sapisid ->
+                        val currentTime = System.currentTimeMillis() / 1000
+                        append("Authorization", sapisidHashHeader(currentTime, sapisid, YouTubeClient.ORIGIN_YOUTUBE))
+                    }
+                }
                 visitorData?.let { append("X-Goog-Visitor-Id", it) }
             }
             contentType(ContentType.Application.Json)
@@ -725,6 +749,14 @@ class InnerTube {
             append("X-YouTube-Client-Version", client.clientVersion)
             append("X-Origin", "https://www.youtube.com")
             append("Referer", "https://www.youtube.com/")
+            cookie?.let { append(HttpHeaders.Cookie, it) }
+            if (client.loginSupported) {
+                append("X-Goog-AuthUser", "0")
+                cookieValue(cookie.orEmpty(), "SAPISID")?.let { sapisid ->
+                    val currentTime = System.currentTimeMillis() / 1000
+                    append("Authorization", sapisidHashHeader(currentTime, sapisid, YouTubeClient.ORIGIN_YOUTUBE))
+                }
+            }
             visitor?.let { append("X-Goog-Visitor-Id", it) }
         }
         contentType(ContentType.Application.Json)

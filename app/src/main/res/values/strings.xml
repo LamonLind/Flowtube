@@ -5425,4 +5425,14 @@
     <string name="search_showing_results_for">Showing results for %1$s</string>
     <string name="search_instead_for">Search instead for %1$s</string>
     <string name="search_did_you_mean">Did you mean %1$s</string>
+    <string name="youtube_account_header">YouTube account</string>
+    <string name="youtube_sign_in">Sign in with Google</string>
+    <string name="youtube_sign_in_optional">Sign in with Google (optional)</string>
+    <string name="youtube_sign_in_subtitle">Use your account for subscriptions and a personalized feed</string>
+    <string name="youtube_sign_out">Sign out</string>
+    <string name="youtube_account_avatar">YouTube account avatar</string>
+    <string name="youtube_sign_in_failed">Sign-in could not be completed. Check your connection and try again.</string>
+    <string name="youtube_subscriptions_failed">Signed in, but subscriptions could not be refreshed.</string>
+    <string name="youtube_signed_in_as">Signed in as %1$s</string>
+    <string name="youtube_signed_out">Signed out</string>
 </resources>

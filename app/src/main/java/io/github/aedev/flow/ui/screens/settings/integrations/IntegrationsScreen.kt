@@ -1,10 +1,15 @@
 package io.github.aedev.flow.ui.screens.settings.integrations
 
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.AutoFixHigh
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.ThumbDownOffAlt
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -12,17 +17,23 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImage
 import io.github.aedev.flow.BuildConfig
 import io.github.aedev.flow.R
+import io.github.aedev.flow.ui.components.integrations.GoogleSignInWebView
 import io.github.aedev.flow.ui.components.settings.SettingsDestination
 import io.github.aedev.flow.ui.components.settings.SettingsPage
 import io.github.aedev.flow.ui.components.settings.SettingsTarget
 import io.github.aedev.flow.ui.components.settings.nav
 import io.github.aedev.flow.ui.components.settings.switch
+import io.github.aedev.flow.ui.components.shared.FlowNavRow
 import io.github.aedev.flow.ui.screens.settings.index.DestinationIndex
 import io.github.aedev.flow.ui.screens.settings.index.IntegrationsIndex
 
@@ -47,6 +58,7 @@ internal fun IntegrationsScreen(
     val deArrowRandomFrame by viewModel.deArrowRandomFrame.collectAsStateWithLifecycle()
     val deArrowThumbnailsOnly by viewModel.deArrowThumbnailsOnly.collectAsStateWithLifecycle()
     val discordState by viewModel.discordState.collectAsStateWithLifecycle()
+    val youtubeAuthState by viewModel.youtubeAuthState.collectAsStateWithLifecycle()
     val aiListBlock by viewModel.aiListBlock.collectAsStateWithLifecycle()
     val aiListWarn by viewModel.aiListWarn.collectAsStateWithLifecycle()
     val aiListStatus by viewModel.aiListStatus.collectAsStateWithLifecycle()
@@ -63,9 +75,13 @@ internal fun IntegrationsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var dialog by rememberSaveable { mutableStateOf<IntegrationsDialog?>(null) }
     var colourCategory by rememberSaveable { mutableStateOf<String?>(null) }
+    var showYouTubeSignIn by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(viewModel) {
         viewModel.discordFailures.collect { snackbarHostState.showSnackbar(it) }
+    }
+    LaunchedEffect(viewModel) {
+        viewModel.youtubeAuthMessages.collect { snackbarHostState.showSnackbar(it) }
     }
 
     SettingsPage(
@@ -74,6 +90,39 @@ internal fun IntegrationsScreen(
         highlight = highlight,
         snackbarHostState = snackbarHostState,
     ) {
+        group(key = "integrations.youtube_account", header = R.string.youtube_account_header) {
+            row("integrations.youtube_account.row") { shape ->
+                val account = youtubeAuthState.account
+                if (youtubeAuthState.isSignedIn && account != null) {
+                    FlowNavRow(
+                        title = account.name,
+                        supportingText = account.email ?: account.channelHandle,
+                        onClick = viewModel::signOutYouTube,
+                        showChevron = false,
+                        shape = shape,
+                        leadingContent = {
+                            AsyncImage(
+                                model = account.thumbnailUrl,
+                                contentDescription = stringResource(R.string.youtube_account_avatar),
+                            )
+                        },
+                        trailingContent = {
+                            androidx.compose.material3.TextButton(onClick = viewModel::signOutYouTube) {
+                                androidx.compose.material3.Text(stringResource(R.string.youtube_sign_out))
+                            }
+                        },
+                    )
+                } else {
+                    FlowNavRow(
+                        title = stringResource(R.string.youtube_sign_in),
+                        supportingText = stringResource(R.string.youtube_sign_in_subtitle),
+                        onClick = { showYouTubeSignIn = true },
+                        leadingIcon = Icons.Outlined.AccountCircle,
+                        shape = shape,
+                    )
+                }
+            }
+        }
         sponsorBlockSection(
             viewModel = viewModel,
             enabled = sponsorBlock,
@@ -151,5 +200,25 @@ internal fun IntegrationsScreen(
             onSelect = { viewModel.setSegmentColor(category, it) },
             onDismiss = { colourCategory = null },
         )
+    }
+
+    if (showYouTubeSignIn) {
+        Dialog(onDismissRequest = { showYouTubeSignIn = false }) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().heightIn(min = 420.dp, max = 760.dp),
+                shape = MaterialTheme.shapes.extraLarge,
+            ) {
+                GoogleSignInWebView(
+                    onSignedIn = {
+                        showYouTubeSignIn = false
+                        viewModel.completeYouTubeSignIn()
+                    },
+                    onFailure = {
+                        showYouTubeSignIn = false
+                        viewModel.reportYouTubeSignInFailure()
+                    },
+                )
+            }
+        }
     }
 }

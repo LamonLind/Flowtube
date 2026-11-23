@@ -2,6 +2,7 @@ package io.github.aedev.flow.innertube
 
 import android.util.Log
 import androidx.annotation.VisibleForTesting
+import io.github.aedev.flow.data.local.ChannelSubscription
 import io.github.aedev.flow.data.model.Comment
 import io.github.aedev.flow.data.model.Video
 import io.github.aedev.flow.data.model.VideoCollaborator
@@ -219,6 +220,12 @@ object YouTube {
         get() = innerTube.useLoginForBrowse
         set(value) {
             innerTube.useLoginForBrowse = value
+        }
+
+    var onAuthenticationFailure: (() -> Unit)?
+        get() = innerTube.onAuthenticationFailure
+        set(value) {
+            innerTube.onAuthenticationFailure = value
         }
 
     suspend fun searchSuggestions(query: String): Result<SearchSuggestions> =
@@ -2547,6 +2554,68 @@ object YouTube {
                 ?.activeAccountHeaderRenderer
                 ?.toAccountInfo()!!
         }
+
+    suspend fun authenticatedSubscriptions(): Result<List<ChannelSubscription>> =
+        runCatching {
+            val response =
+                innerTube
+                    .browse(WEB, browseId = "FEsubscriptions", setLogin = true)
+                    .bodyAsText()
+            val renderers = mutableListOf<JsonObject>()
+            collectChannelRenderers(Json.parseToJsonElement(response), renderers)
+            renderers
+                .mapNotNull { renderer ->
+                    val channelId = renderer["channelId"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                    val name =
+                        renderer["title"]
+                            ?.jsonObject
+                            ?.get("simpleText")
+                            ?.jsonPrimitive
+                            ?.contentOrNull
+                            ?: renderer["title"]
+                                ?.jsonObject
+                                ?.get("runs")
+                                ?.jsonArray
+                                ?.joinToString("") {
+                                    it.jsonObject["text"]
+                                        ?.jsonPrimitive
+                                        ?.contentOrNull
+                                        .orEmpty()
+                                }
+                            ?: return@mapNotNull null
+                    val thumbnail =
+                        renderer["thumbnail"]
+                            ?.jsonObject
+                            ?.get("thumbnails")
+                            ?.jsonArray
+                            ?.lastOrNull()
+                            ?.jsonObject
+                            ?.get("url")
+                            ?.jsonPrimitive
+                            ?.contentOrNull
+                            .orEmpty()
+                    ChannelSubscription(channelId = channelId, channelName = name, channelThumbnail = thumbnail)
+                }.distinctBy { it.channelId }
+        }
+
+    private fun collectChannelRenderers(
+        element: JsonElement,
+        output: MutableList<JsonObject>,
+    ) {
+        when (element) {
+            is JsonObject -> {
+                element["channelRenderer"]?.jsonObject?.let(output::add)
+                element["gridChannelRenderer"]?.jsonObject?.let(output::add)
+                element.values.forEach { collectChannelRenderers(it, output) }
+            }
+
+            else -> {
+                element.jsonArrayOrNull()?.forEach { collectChannelRenderers(it, output) }
+            }
+        }
+    }
+
+    private fun JsonElement.jsonArrayOrNull() = (this as? kotlinx.serialization.json.JsonArray)
 
     suspend fun getMediaInfo(videoId: String): Result<MediaInfo> =
         runCatching {
