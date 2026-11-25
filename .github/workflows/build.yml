@@ -233,13 +233,13 @@ jobs:
 
       # GitHub release APKs are only published from tags, and nightly is
       # initWith(release), so regular runs build nightly in their place.
-      # Pull requests build only the ARM64 split; main and tagged release builds retain all outputs.
+      # Pull requests and branch-dispatched validation builds use only ARM64; main and tagged releases retain all outputs.
       - name: Build CI APKs
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         run: >
           ./gradlew :app:assembleGithubNightly :app:assembleFossRelease
-          ${{ github.event_name == 'pull_request' && '-Pflow.prBuild=true' || '' }}
-          ${{ github.event_name == 'pull_request' && '-Pflow.ciAbi=arm64-v8a' || '' }}
+          ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main')) && '-Pflow.prBuild=true' || '' }}
+          ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main')) && '-Pflow.ciAbi=arm64-v8a' || '' }}
           --build-cache --stacktrace
         env:
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
