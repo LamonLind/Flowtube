@@ -84,7 +84,7 @@ android {
 
         // Support all architectures for maximum device compatibility
         ndk {
-            abiFilters.addAll(buildAbis)
+            if (ciAbi == null) abiFilters.addAll(buildAbis)
         }
     }
 

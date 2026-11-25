@@ -77,8 +77,9 @@ internal object YouTubeCookieParser {
                     ?: throw YouTubeCookieParseException(YouTubeCookieParseProblem.INVALID_COOKIE)
             val name = cookie.string("name")
             val value = cookie.string("value")
-            val domain = cookie.string("domain")
-                ?: throw YouTubeCookieParseException(YouTubeCookieParseProblem.INVALID_COOKIE)
+            val domain =
+                cookie.string("domain")
+                    ?: throw YouTubeCookieParseException(YouTubeCookieParseProblem.INVALID_COOKIE)
             val sessionCookie = cookie.boolean("session") == true
             val expiration =
                 if (sessionCookie) {
@@ -96,7 +97,8 @@ internal object YouTubeCookieParser {
     }
 
     private fun parseNetscape(text: String): List<Cookie> =
-        text.lineSequence()
+        text
+            .lineSequence()
             .map(String::trim)
             .filter { line -> line.isNotBlank() && (!line.startsWith("#") || line.startsWith("#HttpOnly_")) }
             .map { line ->
@@ -164,8 +166,7 @@ internal object YouTubeCookieParser {
         return host == "youtube.com" || host.endsWith(".youtube.com")
     }
 
-    private fun looksLikeNetscape(text: String): Boolean =
-        text.lineSequence().any { it.contains('\t') || it.startsWith("#HttpOnly_") }
+    private fun looksLikeNetscape(text: String): Boolean = text.lineSequence().any { it.contains('\t') || it.startsWith("#HttpOnly_") }
 
     private fun JsonObject.string(key: String): String? =
         this[key]?.let { element ->

@@ -922,11 +922,10 @@ class InnerTube {
     suspend fun accountMenu(
         client: YouTubeClient,
         cookieOverride: String? = cookie,
-    ) =
-        httpClient.post("account/account_menu") {
-            ytClient(client, setLogin = true, cookieOverride = cookieOverride)
-            setBody(AccountMenuBody(client.toContext(locale, visitorData, dataSyncId)))
-        }
+    ) = httpClient.post("account/account_menu") {
+        ytClient(client, setLogin = true, cookieOverride = cookieOverride)
+        setBody(AccountMenuBody(client.toContext(locale, visitorData, dataSyncId)))
+    }
 
     suspend fun likeVideo(
         client: YouTubeClient,

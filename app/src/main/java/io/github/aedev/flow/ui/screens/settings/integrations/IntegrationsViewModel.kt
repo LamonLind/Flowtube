@@ -90,7 +90,7 @@ class IntegrationsViewModel
         val discordState = discord.settingsState
 
         private val _youtubeCookieState = MutableStateFlow<YouTubeCookieState>(YouTubeCookieState.Checking)
-        val youtubeCookieState: StateFlow<YouTubeCookieState> = _youtubeCookieState
+        internal val youtubeCookieState: StateFlow<YouTubeCookieState> = _youtubeCookieState
 
         /** Every category's flows are built once here, not per recomposition. */
         val segments =
