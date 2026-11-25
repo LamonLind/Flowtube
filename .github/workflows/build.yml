@@ -233,11 +233,13 @@ jobs:
 
       # GitHub release APKs are only published from tags, and nightly is
       # initWith(release), so regular runs build nightly in their place.
+      # Pull requests build only the ARM64 split; main and tagged release builds retain all outputs.
       - name: Build CI APKs
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         run: >
           ./gradlew :app:assembleGithubNightly :app:assembleFossRelease
           ${{ github.event_name == 'pull_request' && '-Pflow.prBuild=true' || '' }}
+          ${{ github.event_name == 'pull_request' && '-Pflow.ciAbi=arm64-v8a' || '' }}
           --build-cache --stacktrace
         env:
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
@@ -316,7 +318,11 @@ jobs:
           NIGHTLY_SIGNED: ${{ steps.nightly_keystore.outputs.signed }}
         run: |
           set -euo pipefail
-          src=app/build/outputs/apk/github/nightly/app-github-universal-nightly.apk
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            src=app/build/outputs/apk/github/nightly/app-github-arm64-v8a-nightly.apk
+          else
+            src=app/build/outputs/apk/github/nightly/app-github-universal-nightly.apk
+          fi
           test -f "$src"
           if [ "$NIGHTLY_SIGNED" = "true" ]; then
             apksigner=$(find "$ANDROID_SDK_ROOT/build-tools" -name apksigner -type f | sort -V | tail -1)
@@ -350,20 +356,29 @@ jobs:
         run: |
           shopt -s nullglob
           apks=()
-          expected=3
-          if [ "${GITHUB_REF#refs/tags/v}" != "$GITHUB_REF" ]; then
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             apks+=(
-              app/build/outputs/apk/github/release/app-github-universal-release*.apk
-              app/build/outputs/apk/github/release/app-github-arm64-v8a-release*.apk
-              app/build/outputs/apk/github/release/app-github-armeabi-v7a-release*.apk
+              app/build/outputs/apk/github/nightly/app-github-arm64-v8a-nightly*.apk
+              app/build/outputs/apk/foss/release/app-foss-arm64-v8a-release*.apk
             )
-            expected=6
+            expected=2
+          else
+            if [ "${GITHUB_REF#refs/tags/v}" != "$GITHUB_REF" ]; then
+              apks+=(
+                app/build/outputs/apk/github/release/app-github-universal-release*.apk
+                app/build/outputs/apk/github/release/app-github-arm64-v8a-release*.apk
+                app/build/outputs/apk/github/release/app-github-armeabi-v7a-release*.apk
+              )
+              expected=6
+            else
+              expected=3
+            fi
+            apks+=(
+              app/build/outputs/apk/foss/release/app-foss-universal-release*.apk
+              app/build/outputs/apk/foss/release/app-foss-arm64-v8a-release*.apk
+              app/build/outputs/apk/foss/release/app-foss-armeabi-v7a-release*.apk
+            )
           fi
-          apks+=(
-            app/build/outputs/apk/foss/release/app-foss-universal-release*.apk
-            app/build/outputs/apk/foss/release/app-foss-arm64-v8a-release*.apk
-            app/build/outputs/apk/foss/release/app-foss-armeabi-v7a-release*.apk
-          )
 
           if (( ${#apks[@]} != expected )); then
             printf 'Expected %d published APKs, found %d.\n' "$expected" "${#apks[@]}" >&2

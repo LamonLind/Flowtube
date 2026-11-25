@@ -10,12 +10,49 @@ import io.github.aedev.flow.data.local.SponsorBlockSkipButtonStyle
 import io.github.aedev.flow.data.model.SponsorBlockCategories
 import io.github.aedev.flow.discord.DiscordLinkResult
 import io.github.aedev.flow.discord.DiscordPresenceController
+import io.github.aedev.flow.innertube.YouTube
+import io.github.aedev.flow.innertube.YouTubeAccountSessionExpiredException
+import io.github.aedev.flow.innertube.YouTubeAccountVerificationRequiredException
+import io.github.aedev.flow.innertube.YouTubeCookieParseException
+import io.github.aedev.flow.innertube.YouTubeCookieParseProblem
+import io.github.aedev.flow.innertube.YouTubeCookieParser
 import io.github.aedev.flow.ui.screens.settings.SettingsViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+import java.util.Locale
 import javax.inject.Inject
+
+internal sealed interface YouTubeCookieState {
+    data object Checking : YouTubeCookieState
+
+    data object SignedOut : YouTubeCookieState
+
+    data class SignedIn(val accountName: String) : YouTubeCookieState
+
+    data class Failed(val problem: YouTubeCookieProblem) : YouTubeCookieState
+}
+
+internal enum class YouTubeCookieProblem {
+    EMPTY_INPUT,
+    INVALID_FORMAT,
+    INVALID_COOKIE,
+    UNRELATED_DOMAIN,
+    EXPIRED_COOKIE,
+    MISSING_REQUIRED_COOKIES,
+    COOKIE_EXPIRED,
+    ACCOUNT_REVERIFICATION,
+    NETWORK_ERROR,
+    STORAGE_ERROR,
+    FILE_READ_ERROR,
+}
 
 /** One segment category's behaviour and colour; a null [colorArgb] means the default colour. */
 @Immutable
@@ -52,6 +89,9 @@ class IntegrationsViewModel
         val aiReportName = preferences.aiListReportName.asState("")
         val discordState = discord.settingsState
 
+        private val _youtubeCookieState = MutableStateFlow<YouTubeCookieState>(YouTubeCookieState.Checking)
+        val youtubeCookieState: StateFlow<YouTubeCookieState> = _youtubeCookieState
+
         /** Every category's flows are built once here, not per recomposition. */
         val segments =
             combine(
@@ -69,6 +109,112 @@ class IntegrationsViewModel
 
         /** The message of a Discord action that failed, for the page to show once. */
         val discordFailures: SharedFlow<String> = _discordFailures.asSharedFlow()
+
+        fun loadYouTubeAccount() =
+            write {
+                val cookie =
+                    try {
+                        preferences.youtubeCookie.first()
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        _youtubeCookieState.value = YouTubeCookieState.Failed(YouTubeCookieProblem.STORAGE_ERROR)
+                        return@write
+                    }
+                if (cookie == null) {
+                    YouTube.cookie = null
+                    YouTube.useLoginForBrowse = false
+                    _youtubeCookieState.value = YouTubeCookieState.SignedOut
+                } else {
+                    YouTube.cookie = cookie
+                    YouTube.useLoginForBrowse = true
+                    checkYouTubeAccount(cookie)
+                }
+            }
+
+        fun importYouTubeCookies(input: String) =
+            write {
+                val cookie =
+                    try {
+                        withContext(Dispatchers.Default) { YouTubeCookieParser.parse(input) }
+                    } catch (error: YouTubeCookieParseException) {
+                        _youtubeCookieState.value = YouTubeCookieState.Failed(error.problem.toUiProblem())
+                        return@write
+                    }
+
+                _youtubeCookieState.value = YouTubeCookieState.Checking
+                val account =
+                    YouTube.accountInfo(cookie).getOrElse { error ->
+                        if (error is CancellationException) throw error
+                        _youtubeCookieState.value = YouTubeCookieState.Failed(error.toUiProblem())
+                        return@write
+                    }
+
+                try {
+                    preferences.setYoutubeCookie(cookie)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    _youtubeCookieState.value = YouTubeCookieState.Failed(YouTubeCookieProblem.STORAGE_ERROR)
+                    return@write
+                }
+                YouTube.cookie = cookie
+                YouTube.useLoginForBrowse = true
+                _youtubeCookieState.value = YouTubeCookieState.SignedIn(account.name)
+            }
+
+        fun signOutYouTube() =
+            write {
+                try {
+                    preferences.setYoutubeCookie(null)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    _youtubeCookieState.value = YouTubeCookieState.Failed(YouTubeCookieProblem.STORAGE_ERROR)
+                    return@write
+                }
+                YouTube.cookie = null
+                YouTube.useLoginForBrowse = false
+                _youtubeCookieState.value = YouTubeCookieState.SignedOut
+            }
+
+        fun reportCookieFileReadError() {
+            _youtubeCookieState.value = YouTubeCookieState.Failed(YouTubeCookieProblem.FILE_READ_ERROR)
+        }
+
+        private suspend fun checkYouTubeAccount(cookie: String) {
+            val result = YouTube.accountInfo(cookie)
+            _youtubeCookieState.value =
+                result.fold(
+                    onSuccess = { YouTubeCookieState.SignedIn(it.name) },
+                    onFailure = {
+                        if (it is CancellationException) throw it
+                        YouTubeCookieState.Failed(it.toUiProblem())
+                    },
+                )
+        }
+
+        private fun Throwable.toUiProblem(): YouTubeCookieProblem {
+            val message = message.orEmpty().lowercase(Locale.ROOT)
+            return when {
+                this is YouTubeAccountVerificationRequiredException -> YouTubeCookieProblem.ACCOUNT_REVERIFICATION
+                this is YouTubeAccountSessionExpiredException -> YouTubeCookieProblem.COOKIE_EXPIRED
+                listOf("verify it's you", "verify your identity", "reverification", "re-verification", "unusual activity")
+                    .any(message::contains) -> YouTubeCookieProblem.ACCOUNT_REVERIFICATION
+                this is java.io.IOException -> YouTubeCookieProblem.NETWORK_ERROR
+                else -> YouTubeCookieProblem.COOKIE_EXPIRED
+            }
+        }
+
+        private fun YouTubeCookieParseProblem.toUiProblem(): YouTubeCookieProblem =
+            when (this) {
+                YouTubeCookieParseProblem.EMPTY_INPUT -> YouTubeCookieProblem.EMPTY_INPUT
+                YouTubeCookieParseProblem.INVALID_FORMAT -> YouTubeCookieProblem.INVALID_FORMAT
+                YouTubeCookieParseProblem.INVALID_COOKIE -> YouTubeCookieProblem.INVALID_COOKIE
+                YouTubeCookieParseProblem.UNRELATED_DOMAIN -> YouTubeCookieProblem.UNRELATED_DOMAIN
+                YouTubeCookieParseProblem.EXPIRED_COOKIE -> YouTubeCookieProblem.EXPIRED_COOKIE
+                YouTubeCookieParseProblem.MISSING_REQUIRED_COOKIES -> YouTubeCookieProblem.MISSING_REQUIRED_COOKIES
+            }
 
         fun setSponsorBlock(value: Boolean) = write { preferences.setSponsorBlockEnabled(value) }
 

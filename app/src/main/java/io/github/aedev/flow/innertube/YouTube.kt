@@ -137,6 +137,7 @@ import io.github.aedev.flow.utils.PerformanceDispatcher
 import io.github.aedev.flow.utils.avatarImageIdentityKey
 import io.github.aedev.flow.utils.relativedate.RelativeUploadDateParser
 import io.ktor.client.call.body
+import io.ktor.client.plugins.ResponseException
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -157,6 +158,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.net.Proxy
 import java.time.Instant
 import java.time.ZoneId
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.random.Random
 
@@ -2536,22 +2538,50 @@ object YouTube {
     /** A fresh visitorData, unrelated to the one in use; see [VisitorDataMint] for where it comes from. */
     suspend fun visitorData(): Result<String> = runCatching { visitorDataMint.mint() }
 
-    suspend fun accountInfo(): Result<AccountInfo> =
+    suspend fun accountInfo(cookieOverride: String? = cookie): Result<AccountInfo> =
         runCatching {
-            innerTube
-                .accountMenu(WEB_REMIX)
-                .body<AccountMenuResponse>()
-                .actions[0]
-                .openPopupAction.popup.multiPageMenuRenderer
-                .header
-                ?.activeAccountHeaderRenderer
-                ?.toAccountInfo()!!
+            try {
+                innerTube
+                    .accountMenu(WEB_REMIX, cookieOverride)
+                    .body<AccountMenuResponse>()
+                    .actions[0]
+                    .openPopupAction.popup.multiPageMenuRenderer
+                    .header
+                    ?.activeAccountHeaderRenderer
+                    ?.toAccountInfo()!!
+            } catch (error: ResponseException) {
+                val responseText =
+                    try {
+                        error.response.bodyAsText()
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        ""
+                    }
+                val detail = "${error.message.orEmpty()} $responseText".lowercase(Locale.ROOT)
+                if (VERIFICATION_PROMPTS.any(detail::contains)) {
+                    throw YouTubeAccountVerificationRequiredException()
+                }
+                throw YouTubeAccountSessionExpiredException()
+            }
         }
 
     suspend fun getMediaInfo(videoId: String): Result<MediaInfo> =
         runCatching {
             return innerTube.getMediaInfo(videoId)
         }
+
+    private val VERIFICATION_PROMPTS =
+        listOf(
+            "verify it's you",
+            "verify your identity",
+            "reverification",
+            "re-verification",
+            "verifyaccount",
+            "unusual activity",
+            "recaptcha",
+            "captcha",
+        )
 
     suspend fun returnYouTubeDislike(videoId: String): Result<ReturnYouTubeDislikeResponse> =
         runCatching {
@@ -2641,3 +2671,7 @@ object YouTube {
                 .toCommentRepliesPage(ownVideoId)
         }
 }
+
+internal class YouTubeAccountVerificationRequiredException : Exception()
+
+internal class YouTubeAccountSessionExpiredException : Exception()

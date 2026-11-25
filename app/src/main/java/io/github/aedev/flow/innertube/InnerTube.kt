@@ -249,6 +249,7 @@ class InnerTube {
         client: YouTubeClient,
         setLogin: Boolean = false,
         apiUrl: String? = null,
+        cookieOverride: String? = cookie,
     ) {
         val useMainSite = apiUrl != null && apiUrl != YouTubeClient.API_URL_YOUTUBE_MUSIC
         val origin = if (useMainSite) YouTubeClient.ORIGIN_YOUTUBE else YouTubeClient.ORIGIN_YOUTUBE_MUSIC
@@ -262,11 +263,12 @@ class InnerTube {
             append("Referer", referer)
             visitorData?.let { append("X-Goog-Visitor-Id", it) }
             if (setLogin && client.loginSupported) {
-                cookie?.let { cookie ->
-                    append("cookie", cookie)
-                    if ("SAPISID" !in cookieMap) return@let
+                cookieOverride?.let { activeCookie ->
+                    append("cookie", activeCookie)
+                    val activeCookieMap = if (activeCookie == cookie) cookieMap else parseCookieString(activeCookie)
+                    val sapisid = activeCookieMap["SAPISID"] ?: return@let
                     val currentTime = System.currentTimeMillis() / 1000
-                    val sapisidHash = sha1("$currentTime ${cookieMap["SAPISID"]} $origin")
+                    val sapisidHash = sha1("$currentTime $sapisid $origin")
                     append("Authorization", "SAPISIDHASH ${currentTime}_$sapisidHash")
                 }
             }
@@ -917,9 +919,12 @@ class InnerTube {
                 header("Referer", "https://www.youtube.com")
             }.bodyAsText()
 
-    suspend fun accountMenu(client: YouTubeClient) =
+    suspend fun accountMenu(
+        client: YouTubeClient,
+        cookieOverride: String? = cookie,
+    ) =
         httpClient.post("account/account_menu") {
-            ytClient(client, setLogin = true)
+            ytClient(client, setLogin = true, cookieOverride = cookieOverride)
             setBody(AccountMenuBody(client.toContext(locale, visitorData, dataSyncId)))
         }
 
