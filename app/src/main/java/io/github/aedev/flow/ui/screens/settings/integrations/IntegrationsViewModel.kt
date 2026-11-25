@@ -89,8 +89,8 @@ class IntegrationsViewModel
         val aiReportName = preferences.aiListReportName.asState("")
         val discordState = discord.settingsState
 
-        private val _youtubeCookieState = MutableStateFlow<YouTubeCookieState>(YouTubeCookieState.Checking)
-        internal val youtubeCookieState: StateFlow<YouTubeCookieState> = _youtubeCookieState
+        private val youtubeCookieStateMutable = MutableStateFlow<YouTubeCookieState>(YouTubeCookieState.Checking)
+        internal val youtubeCookieState: StateFlow<YouTubeCookieState> = youtubeCookieStateMutable
 
         /** Every category's flows are built once here, not per recomposition. */
         val segments =
@@ -118,13 +118,13 @@ class IntegrationsViewModel
                     } catch (error: CancellationException) {
                         throw error
                     } catch (_: Exception) {
-                        _youtubeCookieState.value = YouTubeCookieState.Failed(YouTubeCookieProblem.STORAGE_ERROR)
+                        youtubeCookieStateMutable.value = YouTubeCookieState.Failed(YouTubeCookieProblem.STORAGE_ERROR)
                         return@write
                     }
                 if (cookie == null) {
                     YouTube.cookie = null
                     YouTube.useLoginForBrowse = false
-                    _youtubeCookieState.value = YouTubeCookieState.SignedOut
+                    youtubeCookieStateMutable.value = YouTubeCookieState.SignedOut
                 } else {
                     YouTube.cookie = cookie
                     YouTube.useLoginForBrowse = true
@@ -138,15 +138,15 @@ class IntegrationsViewModel
                     try {
                         withContext(Dispatchers.Default) { YouTubeCookieParser.parse(input) }
                     } catch (error: YouTubeCookieParseException) {
-                        _youtubeCookieState.value = YouTubeCookieState.Failed(error.problem.toUiProblem())
+                        youtubeCookieStateMutable.value = YouTubeCookieState.Failed(error.problem.toUiProblem())
                         return@write
                     }
 
-                _youtubeCookieState.value = YouTubeCookieState.Checking
+                youtubeCookieStateMutable.value = YouTubeCookieState.Checking
                 val account =
                     YouTube.accountInfo(cookie).getOrElse { error ->
                         if (error is CancellationException) throw error
-                        _youtubeCookieState.value = YouTubeCookieState.Failed(error.toUiProblem())
+                        youtubeCookieStateMutable.value = YouTubeCookieState.Failed(error.toUiProblem())
                         return@write
                     }
 
@@ -155,12 +155,12 @@ class IntegrationsViewModel
                 } catch (error: CancellationException) {
                     throw error
                 } catch (_: Exception) {
-                    _youtubeCookieState.value = YouTubeCookieState.Failed(YouTubeCookieProblem.STORAGE_ERROR)
+                    youtubeCookieStateMutable.value = YouTubeCookieState.Failed(YouTubeCookieProblem.STORAGE_ERROR)
                     return@write
                 }
                 YouTube.cookie = cookie
                 YouTube.useLoginForBrowse = true
-                _youtubeCookieState.value = YouTubeCookieState.SignedIn(account.name)
+                youtubeCookieStateMutable.value = YouTubeCookieState.SignedIn(account.name)
             }
 
         fun signOutYouTube() =
@@ -170,21 +170,21 @@ class IntegrationsViewModel
                 } catch (error: CancellationException) {
                     throw error
                 } catch (_: Exception) {
-                    _youtubeCookieState.value = YouTubeCookieState.Failed(YouTubeCookieProblem.STORAGE_ERROR)
+                    youtubeCookieStateMutable.value = YouTubeCookieState.Failed(YouTubeCookieProblem.STORAGE_ERROR)
                     return@write
                 }
                 YouTube.cookie = null
                 YouTube.useLoginForBrowse = false
-                _youtubeCookieState.value = YouTubeCookieState.SignedOut
+                youtubeCookieStateMutable.value = YouTubeCookieState.SignedOut
             }
 
         fun reportCookieFileReadError() {
-            _youtubeCookieState.value = YouTubeCookieState.Failed(YouTubeCookieProblem.FILE_READ_ERROR)
+            youtubeCookieStateMutable.value = YouTubeCookieState.Failed(YouTubeCookieProblem.FILE_READ_ERROR)
         }
 
         private suspend fun checkYouTubeAccount(cookie: String) {
             val result = YouTube.accountInfo(cookie)
-            _youtubeCookieState.value =
+            youtubeCookieStateMutable.value =
                 result.fold(
                     onSuccess = { YouTubeCookieState.SignedIn(it.name) },
                     onFailure = {
