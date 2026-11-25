@@ -199,8 +199,13 @@ class IntegrationsViewModel
             return when {
                 this is YouTubeAccountVerificationRequiredException -> YouTubeCookieProblem.ACCOUNT_REVERIFICATION
                 this is YouTubeAccountSessionExpiredException -> YouTubeCookieProblem.COOKIE_EXPIRED
-                listOf("verify it's you", "verify your identity", "reverification", "re-verification", "unusual activity")
-                    .any(message::contains) -> YouTubeCookieProblem.ACCOUNT_REVERIFICATION
+                listOf(
+                    "verify it's you",
+                    "verify your identity",
+                    "reverification",
+                    "re-verification",
+                    "unusual activity",
+                ).any(message::contains) -> YouTubeCookieProblem.ACCOUNT_REVERIFICATION
                 this is java.io.IOException -> YouTubeCookieProblem.NETWORK_ERROR
                 else -> YouTubeCookieProblem.COOKIE_EXPIRED
             }
