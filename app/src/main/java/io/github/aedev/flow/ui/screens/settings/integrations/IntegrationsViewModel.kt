@@ -35,9 +35,13 @@ internal sealed interface YouTubeCookieState {
 
     data object SignedOut : YouTubeCookieState
 
-    data class SignedIn(val accountName: String) : YouTubeCookieState
+    data class SignedIn(
+        val accountName: String,
+    ) : YouTubeCookieState
 
-    data class Failed(val problem: YouTubeCookieProblem) : YouTubeCookieState
+    data class Failed(
+        val problem: YouTubeCookieProblem,
+    ) : YouTubeCookieState
 }
 
 internal enum class YouTubeCookieProblem {
@@ -198,7 +202,9 @@ class IntegrationsViewModel
             val message = message.orEmpty().lowercase(Locale.ROOT)
             return when {
                 this is YouTubeAccountVerificationRequiredException -> YouTubeCookieProblem.ACCOUNT_REVERIFICATION
+
                 this is YouTubeAccountSessionExpiredException -> YouTubeCookieProblem.COOKIE_EXPIRED
+
                 listOf(
                     "verify it's you",
                     "verify your identity",
@@ -206,7 +212,9 @@ class IntegrationsViewModel
                     "re-verification",
                     "unusual activity",
                 ).any(message::contains) -> YouTubeCookieProblem.ACCOUNT_REVERIFICATION
+
                 this is java.io.IOException -> YouTubeCookieProblem.NETWORK_ERROR
+
                 else -> YouTubeCookieProblem.COOKIE_EXPIRED
             }
         }
