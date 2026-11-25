@@ -1,5 +1,7 @@
 package io.github.aedev.flow.ui.screens.settings.integrations
 
+import android.content.ContentResolver
+import android.net.Uri
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoFixHigh
 import androidx.compose.material.icons.outlined.GraphicEq
@@ -10,8 +12,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -25,11 +29,14 @@ import io.github.aedev.flow.ui.components.settings.nav
 import io.github.aedev.flow.ui.components.settings.switch
 import io.github.aedev.flow.ui.screens.settings.index.DestinationIndex
 import io.github.aedev.flow.ui.screens.settings.index.IntegrationsIndex
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.IOException
 
 /**
- * The outside services Flow can talk to: SponsorBlock, DeArrow, the AiSList channel list, Return
- * YouTube Dislike and, in builds that include it, Discord Rich Presence. Each service's first row
- * is its own switch, and the rows that depend on it wait for it.
+ * The external services and YouTube account Flow can connect to from one place.
  */
 @Composable
 internal fun IntegrationsScreen(
@@ -47,6 +54,7 @@ internal fun IntegrationsScreen(
     val deArrowRandomFrame by viewModel.deArrowRandomFrame.collectAsStateWithLifecycle()
     val deArrowThumbnailsOnly by viewModel.deArrowThumbnailsOnly.collectAsStateWithLifecycle()
     val discordState by viewModel.discordState.collectAsStateWithLifecycle()
+    val youtubeCookieState by viewModel.youtubeCookieState.collectAsStateWithLifecycle()
     val aiListBlock by viewModel.aiListBlock.collectAsStateWithLifecycle()
     val aiListWarn by viewModel.aiListWarn.collectAsStateWithLifecycle()
     val aiListStatus by viewModel.aiListStatus.collectAsStateWithLifecycle()
@@ -60,11 +68,14 @@ internal fun IntegrationsScreen(
     val aiListSourceLabel = if (aiListSource.isDefault) stringResource(R.string.ai_list_source_default) else aiListSource.host
     val aiReportNameLabel = aiReportName.ifBlank { stringResource(R.string.ai_report_name_unset) }
     val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     var dialog by rememberSaveable { mutableStateOf<IntegrationsDialog?>(null) }
     var colourCategory by rememberSaveable { mutableStateOf<String?>(null) }
 
     LaunchedEffect(viewModel) {
+        viewModel.loadYouTubeAccount()
         viewModel.discordFailures.collect { snackbarHostState.showSnackbar(it) }
     }
 
@@ -85,6 +96,24 @@ internal fun IntegrationsScreen(
             onEditUserId = { dialog = IntegrationsDialog.USER_ID },
             onPickColour = { colourCategory = it },
         )
+        youtubeCookiesSection(
+            state = youtubeCookieState,
+            viewModel = viewModel,
+            onUpload = { uri ->
+                coroutineScope.launch {
+                    val cookies =
+                        try {
+                            withContext(Dispatchers.IO) { context.contentResolver.readYouTubeCookieFile(uri) }
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (_: Exception) {
+                            viewModel.reportCookieFileReadError()
+                            return@launch
+                        }
+                    viewModel.importYouTubeCookies(cookies)
+                }
+            },
+        )
         group(key = "integrations.scrobbling.group", header = R.string.scrobbling_title) {
             nav(
                 DestinationIndex.entry(SettingsDestination.SCROBBLING),
@@ -92,6 +121,7 @@ internal fun IntegrationsScreen(
                 onClick = { onNavigate(SettingsTarget(SettingsDestination.SCROBBLING)) },
             )
         }
+
         group(key = "integrations.dearrow.group", header = R.string.player_settings_dearrow) {
             switch(IntegrationsIndex.deArrow, viewModel.deArrow, viewModel::setDeArrow, icon = Icons.Outlined.AutoFixHigh)
             // With thumbnails only, a frame is the only fallback left, so the row reads on; the stored value is kept.
@@ -151,5 +181,24 @@ internal fun IntegrationsScreen(
             onSelect = { viewModel.setSegmentColor(category, it) },
             onDismiss = { colourCategory = null },
         )
+    }
+}
+
+private const val MAX_YOUTUBE_COOKIE_FILE_CHARS = 1_000_000
+
+private fun ContentResolver.readYouTubeCookieFile(uri: Uri): String {
+    val input =
+        openInputStream(uri)
+            ?: throw IOException("Unable to open cookie file")
+    return input.bufferedReader().use { reader ->
+        val text = StringBuilder()
+        val buffer = CharArray(8_192)
+        while (true) {
+            val count = reader.read(buffer)
+            if (count < 0) break
+            if (text.length + count > MAX_YOUTUBE_COOKIE_FILE_CHARS) throw IOException("Cookie file is too large")
+            text.append(buffer, 0, count)
+        }
+        text.toString()
     }
 }

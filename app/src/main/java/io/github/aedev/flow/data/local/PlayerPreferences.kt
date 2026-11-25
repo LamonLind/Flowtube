@@ -78,6 +78,7 @@ private const val MAX_UNPLAYABLE_VIDEO_IDS = 1_000
 private val BackupExcludedKeys =
     setOf(
         "proxy_password",
+        "youtube_cookie",
         "translation_api_key",
         "sb_user_id",
         "app_lock_enabled",
@@ -517,6 +518,7 @@ class PlayerPreferences(
         val PROXY_USERNAME = device(stringPreferencesKey("proxy_username"))
         val PROXY_PASSWORD = device(stringPreferencesKey("proxy_password"))
         val PROXY_BYPASS_ON_VPN = device(booleanPreferencesKey("proxy_bypass_on_vpn"))
+        val YOUTUBE_COOKIE = device(stringPreferencesKey("youtube_cookie"))
         val SURFACE_READY_TIMEOUT_MS = device(longPreferencesKey("surface_ready_timeout_ms"))
 
         // Audio track preference
@@ -4871,6 +4873,26 @@ class PlayerPreferences(
                 preferences.remove(DeviceKeys.PROXY_PASSWORD)
             } else {
                 preferences[DeviceKeys.PROXY_PASSWORD] = sealed
+            }
+        }
+    }
+
+    val youtubeCookie: Flow<String?> =
+        context.devicePreferencesDataStore.data
+            .map { preferences ->
+                preferences[DeviceKeys.YOUTUBE_COOKIE]
+                    ?.takeIf { it.startsWith("ks1:") }
+                    ?.let(KeystoreSecretBox::open)
+                    ?.takeIf(String::isNotEmpty)
+            }.flowOn(Dispatchers.IO)
+
+    suspend fun setYoutubeCookie(cookie: String?) {
+        val sealed = cookie?.takeIf(String::isNotEmpty)?.let { withContext(Dispatchers.IO) { KeystoreSecretBox.seal(it) } }
+        context.devicePreferencesDataStore.edit { preferences ->
+            if (sealed == null) {
+                preferences.remove(DeviceKeys.YOUTUBE_COOKIE)
+            } else {
+                preferences[DeviceKeys.YOUTUBE_COOKIE] = sealed
             }
         }
     }

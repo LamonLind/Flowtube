@@ -1,0 +1,8 @@
+# Netscape HTTP Cookie File
+.youtube.com	TRUE	/	FALSE	2000000000	SID	sample-SID
+.youtube.com	TRUE	/	FALSE	2000000000	HSID	sample-HSID
+.youtube.com	TRUE	/	FALSE	2000000000	SSID	sample-SSID
+.youtube.com	TRUE	/	FALSE	2000000000	APISID	sample-APISID
+.youtube.com	TRUE	/	FALSE	2000000000	SAPISID	sample-SAPISID
+.youtube.com	TRUE	/	TRUE	2000000000	__Secure-1PSID	sample-secure-1
+#HttpOnly_.youtube.com	TRUE	/	TRUE	2000000000	__Secure-3PSID	sample-secure-3

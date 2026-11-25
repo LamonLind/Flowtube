@@ -50,6 +50,14 @@ fun translatedLocaleTags(): List<String> =
         }.map { if (it == "in" || it.startsWith("in-")) "id" + it.removePrefix("in") else it }
         .sorted()
 
+val ciAbi =
+    providers.gradleProperty("flow.ciAbi").orNull?.let { requested ->
+        require(requested == "arm64-v8a") { "flow.ciAbi only supports arm64-v8a for CI builds" }
+        requested
+    }
+val supportedAbis = listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+val buildAbis = ciAbi?.let { listOf(it) } ?: supportedAbis
+
 android {
     namespace = "io.github.aedev.flow"
     compileSdk {
@@ -76,7 +84,7 @@ android {
 
         // Support all architectures for maximum device compatibility
         ndk {
-            abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
+            if (ciAbi == null) abiFilters.addAll(buildAbis)
         }
     }
 
@@ -91,8 +99,8 @@ android {
         abi {
             isEnable = true
             reset()
-            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-            isUniversalApk = true
+            include(*buildAbis.toTypedArray())
+            isUniversalApk = ciAbi == null
         }
     }
 

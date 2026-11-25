@@ -147,6 +147,18 @@ class FlowApplication :
         DiscordPresenceRuntime.initialize(this, okHttpClient)
 
         val playerPreferences = PlayerPreferences(this)
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            try {
+                playerPreferences.youtubeCookie.first()?.let { cookie ->
+                    YouTube.cookie = cookie
+                    YouTube.useLoginForBrowse = true
+                }
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                Log.w(TAG, "YouTube sign-in could not be restored")
+            }
+        }
 
         // Install crash handler for real-time monitoring
         FlowCrashHandler.install(this)
